@@ -1,0 +1,19 @@
+# 编译生成的可执行文件（如你的项目生成的IOT应用）
+v4l2
+# 编译中间文件
+build/
+*.o
+*.so
+*.a
+# QT自动生成的文件
+*.pro.user
+*.qmake.stash
+moc_*.cpp
+ui_*.h
+qrc_*.cpp
+# 临时文件（vi编辑器产生的）
+*.swp
+*.swo
+# 照片/视频存储目录（如果不需要跟踪用户拍摄的内容）
+photo/
+video/

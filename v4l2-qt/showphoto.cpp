@@ -1,6 +1,11 @@
 #include "showphoto.h"
 #include "ui_showphoto.h"
 #include <v4l2.h>
+#include <QDebug>
+#include <QCoreApplication>
+
+extern v4l2 *w;
+extern showphoto *s;
 
 showphoto::showphoto(QWidget *parent) :
     QMainWindow(parent),
@@ -39,8 +44,9 @@ void showphoto::on_pushButton_back_clicked()
     this->close();
 //    v4l2 v;
 //    v.show();
-    v4l2 *v = new v4l2();   //new会分配内存
-    v->show();
+    //v4l2 *v = new v4l2();   //new会分配内存
+    //v->show();
+    w->show();
 }
 
 

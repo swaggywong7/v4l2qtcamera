@@ -17,7 +17,7 @@
 #include <linux/fb.h>
 #include <stdlib.h>
 #include <string.h>
-
+#include "v4l2capturethread.h"
 #include <QTimer>
 
 #include <showphoto.h>
@@ -42,6 +42,8 @@ private slots:
     void on_pushButton_take_clicked();
 
     void on_pushButton_photos_clicked();
+    void updateFrame(QPixmap pixmap);        // 更新显示(接收线程信号)
+    void handleCaptureError(QString error);  // 处理采集错误
 
 private:
     Ui::v4l2 *ui;
@@ -56,16 +58,14 @@ private:
     int lcd_realvirtual;
 
     int start = 0;
-
-    QTimer *timer;
-
+    V4L2CaptureThread *captureThread;
 //    showphoto s;
 
     int v4l2_open();   //初始化相机参数
     int v4l2_close();
 
-public slots:
-    void video_show();
+//public slots:
+    //void video_show();
 
 };
 #endif // V4L2_H

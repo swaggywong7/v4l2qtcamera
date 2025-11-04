@@ -4,25 +4,43 @@
 #include <QDateTime>
 #include <QRandomGenerator>
 #include <QDebug>
+#include <QMessageBox>
+
+extern v4l2 *w;
+extern showphoto *s;
 
 v4l2::v4l2(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::v4l2)
+    , captureThread(nullptr)
 {
     printf("v4l2 ui运行\n");
     ui->setupUi(this);
 
     //每隔固定的时间显示一帧
-    timer = new QTimer();
-    connect(timer, SIGNAL(timeout()), this, SLOT(video_show()));
+    //timer = new QTimer();
+    //connect(timer, SIGNAL(timeout()), this, SLOT(video_show()));
 
     if(0 == v4l2_open()){
         printf("打开相机成功!\n");
         // 由于摄像头默认30帧每秒,虽然10ms定时执行一次,但实际上1秒内最多有30次可以执行成功
         // 其余都会在ioctl处阻塞
-        timer->start(10);
-        start = 1;
-        ui->pushButton_open->setText("关闭");
+        //timer->start(10);
+       // start = 1;
+       // ui->pushButton_open->setText("关闭");
+        captureThread = new V4L2CaptureThread(video_fd, userbuff, this);
+
+                // 连接信号槽
+                connect(captureThread, &V4L2CaptureThread::frameReady,
+                        this, &v4l2::updateFrame);
+                connect(captureThread, &V4L2CaptureThread::errorOccurred,
+                        this, &v4l2::handleCaptureError);
+
+                // 启动线程
+                captureThread->start();
+
+                start = 1;
+                ui->pushButton_open->setText("关闭");
     }
 
     // 获取当前目录
@@ -45,31 +63,42 @@ v4l2::v4l2(QWidget *parent)
 
 v4l2::~v4l2()
 {
+    if(captureThread) {
+           captureThread->stop();   // 停止线程
+           delete captureThread;    // 删除对象
+           captureThread = nullptr;
+       }
+
+       // xianbu关闭摄像头
+      if(start == 1) {
+           v4l2_close();
+           start=0;
+       }
     delete ui;
 }
 
-void v4l2::video_show()
-{
-    QPixmap pix;
+//void v4l2::video_show()
+//{
+//    QPixmap pix;
 
-    /* 采集图片数据 */
-    //定义结构体变量，用于获取内核队列数据
-    struct v4l2_buffer buffer;
-    buffer.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+//    /* 采集图片数据 */
+//    //定义结构体变量，用于获取内核队列数据
+//    struct v4l2_buffer buffer;
+//    buffer.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
-    /* 从内核中捕获好的输出队列中取出一个 */
-    if(0 == ioctl(video_fd, VIDIOC_DQBUF, &buffer)){
-        /* 显示在label控件上 */
-        //获取一帧显示
-        pix.loadFromData((unsigned char *)userbuff[buffer.index], buffer.bytesused);
-        pix.scaled(ui->label->width(),ui->label->height(),Qt::KeepAspectRatio);
-        ui->label->setPixmap(pix);
-    }
-    /* 将使用后的缓冲区放回到内核的输入队列中 (VIDIOC_QBUF) */
-    if(0 > ioctl(video_fd, VIDIOC_QBUF, &buffer)){
-        perror("返回队列失败！");
-    }
-}
+//    /* 从内核中捕获好的输出队列中取出一个 */
+//    if(0 == ioctl(video_fd, VIDIOC_DQBUF, &buffer)){
+//        /* 显示在label控件上 */
+//        //获取一帧显示
+//        pix.loadFromData((unsigned char *)userbuff[buffer.index], buffer.bytesused);
+//        pix.scaled(ui->label->width(),ui->label->height(),Qt::KeepAspectRatio);
+//        ui->label->setPixmap(pix);
+//    }
+//    /* 将使用后的缓冲区放回到内核的输入队列中 (VIDIOC_QBUF) */
+//    if(0 > ioctl(video_fd, VIDIOC_QBUF, &buffer)){
+//        perror("返回队列失败！");
+//    }
+//}
 
 //打开 & 设置相机
 int v4l2::v4l2_open()
@@ -194,27 +223,59 @@ int v4l2::v4l2_close()
     }
     return -1;
 }
+void v4l2::updateFrame(QPixmap pixmap)
+{
+    // 缩放图像以适应label大小
+    QPixmap scaledPixmap = pixmap.scaled(
+        ui->label->width(),
+        ui->label->height(),
+        Qt::KeepAspectRatio,
+        Qt::SmoothTransformation
+    );
 
+    // 显示
+    ui->label->setPixmap(scaledPixmap);
+}
+
+// ========== 新增：处理错误槽函数 ==========
+void v4l2::handleCaptureError(QString error)
+{
+    qCritical() << "采集错误:" << error;
+    QMessageBox::critical(this, "采集错误", error);
+    on_pushButton_open_clicked();  // 自动关闭
+}
 /* 控制相机打开和关闭 */
 void v4l2::on_pushButton_open_clicked()
 {
     if(start == 0){
-        // 使用v4l2打开 & 设置相机成功
-        if(0 == v4l2_open()){
-            printf("打开相机成功!\n");
-            // 由于摄像头默认30帧每秒,虽然10ms定时执行一次,但实际上1秒内最多有30次可以执行成功
-            // 其余都会在ioctl处阻塞
-            timer->start(10);
-            start = 1;
-            ui->pushButton_open->setText("关闭");
+            // 打开摄像头
+            if(0 == v4l2_open()){
+                printf("打开相机成功!\n");
+
+                // 创建并启动线程
+                captureThread = new V4L2CaptureThread(video_fd, userbuff, this);
+                connect(captureThread, &V4L2CaptureThread::frameReady,
+                        this, &v4l2::updateFrame);
+                connect(captureThread, &V4L2CaptureThread::errorOccurred,
+                        this, &v4l2::handleCaptureError);
+                captureThread->start();
+
+                start = 1;
+                ui->pushButton_open->setText("关闭");
+            }
+        }else{
+            // 关闭摄像头
+            if(captureThread) {
+                captureThread->stop();
+                delete captureThread;
+                captureThread = nullptr;
+            }
+
+            if(0 == v4l2_close()){
+                start = 0;
+                ui->pushButton_open->setText("打开");
+            }
         }
-    }else{
-        if(0 == v4l2_close()){
-            start = 0;
-            timer->stop();
-            ui->pushButton_open->setText("打开");
-        }
-    }
 }
 
 /* 拍照 */
@@ -253,10 +314,11 @@ void v4l2::on_pushButton_take_clicked()
 /* 跳转到 showphoto ui界面 */
 void v4l2::on_pushButton_photos_clicked()
 {
-    if(0 == v4l2_close()){
-        timer->stop();
-    }
+    //if(0 == v4l2_close()){
+        //timer->stop();
+    //}
+
     this->close();
-    showphoto *s = new showphoto();
+    //showphoto *s = new showphoto();
     s->show();
 }

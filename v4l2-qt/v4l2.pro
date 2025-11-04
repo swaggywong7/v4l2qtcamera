@@ -18,11 +18,13 @@ DEFINES += QT_DEPRECATED_WARNINGS
 SOURCES += \
     main.cpp \
     showphoto.cpp \
-    v4l2.cpp
+    v4l2.cpp \
+    v4l2capturethread.cpp
 
 HEADERS += \
     showphoto.h \
-    v4l2.h
+    v4l2.h \
+    v4l2capturethread.h
 
 FORMS += \
     showphoto.ui \
