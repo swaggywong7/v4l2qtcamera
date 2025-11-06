@@ -17,11 +17,13 @@ DEFINES += QT_DEPRECATED_WARNINGS
 
 SOURCES += \
     main.cpp \
+    opencvprocessthread.cpp \
     showphoto.cpp \
     v4l2.cpp \
     v4l2capturethread.cpp
 
 HEADERS += \
+    opencvprocessthread.h \
     showphoto.h \
     v4l2.h \
     v4l2capturethread.h
@@ -30,6 +32,17 @@ FORMS += \
     showphoto.ui \
     v4l2.ui
 
+
+INCLUDEPATH += $$SDK_PATH/staging/usr/include
+
+# OpenCV库文件路径
+LIBS += -L$$SDK_PATH/staging/usr/lib
+
+# OpenCV库文件（注意OpenCV3没有opencv_core这样的命名，使用libopencv_xxx.so）
+LIBS += -lopencv_core \
+        -lopencv_imgproc \
+        -lopencv_imgcodecs \
+        -lopencv_videoio
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin
 else: unix:!android: target.path = /opt/$${TARGET}/bin

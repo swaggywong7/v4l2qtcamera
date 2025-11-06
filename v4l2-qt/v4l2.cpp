@@ -13,6 +13,8 @@ v4l2::v4l2(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::v4l2)
     , captureThread(nullptr)
+    , processThread(nullptr)     // ← 初始化
+    , m_useProcessing(false)     // ← 初始化,默认不启用
 {
     printf("v4l2 ui运行\n");
     ui->setupUi(this);
@@ -29,7 +31,15 @@ v4l2::v4l2(QWidget *parent)
        // start = 1;
        // ui->pushButton_open->setText("关闭");
         captureThread = new V4L2CaptureThread(video_fd, userbuff, this);
+        // ========== 创建OpenCV处理线程 ==========
+        processThread = new OpenCVProcessThread(this);
 
+           // 连接处理后的图像信号
+        connect(processThread, &OpenCVProcessThread::frameProcessed,
+                   this, &v4l2::onProcessedFrame);
+
+           // 启动处理线程
+        processThread->start();
                 // 连接信号槽
                 connect(captureThread, &V4L2CaptureThread::frameReady,
                         this, &v4l2::updateFrame);
@@ -63,6 +73,11 @@ v4l2::v4l2(QWidget *parent)
 
 v4l2::~v4l2()
 {
+    if(processThread) {
+           processThread->stop();
+           delete processThread;
+           processThread = nullptr;
+       }
     if(captureThread) {
            captureThread->stop();   // 停止线程
            delete captureThread;    // 删除对象
@@ -226,15 +241,19 @@ int v4l2::v4l2_close()
 void v4l2::updateFrame(QPixmap pixmap)
 {
     // 缩放图像以适应label大小
-    QPixmap scaledPixmap = pixmap.scaled(
-        ui->label->width(),
-        ui->label->height(),
-        Qt::KeepAspectRatio,
-        Qt::SmoothTransformation
+    if(m_useProcessing && processThread) {
+            processThread->addFrame(pixmap);  // 添加到处理队列
+        } else {
+                QPixmap scaledPixmap = pixmap.scaled(
+                ui->label->width(),
+                ui->label->height(),
+                Qt::KeepAspectRatio,
+                Qt::SmoothTransformation
     );
 
     // 显示
     ui->label->setPixmap(scaledPixmap);
+    }
 }
 
 // ========== 新增：处理错误槽函数 ==========
@@ -243,6 +262,33 @@ void v4l2::handleCaptureError(QString error)
     qCritical() << "采集错误:" << error;
     QMessageBox::critical(this, "采集错误", error);
     on_pushButton_open_clicked();  // 自动关闭
+}
+
+void v4l2::onProcessedFrame(QPixmap pixmap)
+{
+    // 缩放并显示
+    QPixmap scaled = pixmap.scaled(ui->label->width(),
+                                   ui->label->height(),
+                                   Qt::KeepAspectRatio,
+                                   Qt::SmoothTransformation);
+    ui->label->setPixmap(scaled);
+}
+
+// ========== 处理模式改变 ==========
+void v4l2::onProcessModeChanged(int index)
+{
+    if(!processThread) return;
+
+    // 将索引转换为处理模式
+    OpenCVProcessThread::ProcessMode mode =
+        static_cast<OpenCVProcessThread::ProcessMode>(index);
+
+    processThread->setProcessMode(mode);
+
+    // 是否启用处理
+    m_useProcessing = (mode != OpenCVProcessThread::None);
+
+    qDebug() << "处理模式切换:" << index << "启用:" << m_useProcessing;
 }
 /* 控制相机打开和关闭 */
 void v4l2::on_pushButton_open_clicked()

@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "v4l2capturethread.h"
+#include "opencvprocessthread.h"
 #include <QTimer>
 
 #include <showphoto.h>
@@ -44,6 +45,13 @@ private slots:
     void on_pushButton_photos_clicked();
     void updateFrame(QPixmap pixmap);        // 更新显示(接收线程信号)
     void handleCaptureError(QString error);  // 处理采集错误
+    void onProcessedFrame(QPixmap pixmap);          // 接收处理后的图像
+    void onProcessModeChanged(int index);           // 处理模式改变
+    void on_comboBox_process_currentIndexChanged(int index);
+
+    void on_centralwidget_customContextMenuRequested(const QPoint &pos);
+
+    void on_comboBox_currentIndexChanged(int index);
 
 private:
     Ui::v4l2 *ui;
@@ -59,6 +67,8 @@ private:
 
     int start = 0;
     V4L2CaptureThread *captureThread;
+    OpenCVProcessThread *processThread;     // OpenCV处理线程
+    bool m_useProcessing;                   // 是否启用处理
 //    showphoto s;
 
     int v4l2_open();   //初始化相机参数
